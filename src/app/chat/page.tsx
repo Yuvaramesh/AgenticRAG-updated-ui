@@ -23,6 +23,7 @@ import {
   Copy,
   Check,
 } from "lucide-react";
+import { Menu, X } from "lucide-react";
 
 interface Message {
   id: string;
@@ -33,6 +34,7 @@ interface Message {
   user_email?: string;
   translated?: boolean;
   original_text?: string;
+  image_path?: string;
 }
 
 interface ChatHistory {
@@ -42,11 +44,14 @@ interface ChatHistory {
   timestamp: Date;
   agent_type: string;
   user_email?: string;
+  image_path?: string;
 }
 
 export default function ChatPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome",
@@ -112,7 +117,7 @@ export default function ChatPage() {
         },
         body: JSON.stringify({
           query: currentQuery,
-          selectedFile: selectedFile,
+          ...(selectedFile?.trim() && { selectedFile }), // only include if not empty
           chat_history: chatHistory.map((h) => ({
             query: h.query,
             answer: h.answer,
@@ -135,6 +140,7 @@ export default function ChatPage() {
         timestamp: new Date(),
         agent_type: data.agent_type,
         user_email: data.user_email,
+        image_path: data.image_path || "",
       };
 
       setMessages((prev) => [...prev, botMessage]);
@@ -265,129 +271,138 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="min-h-screen text-gray-900 bg-gray-50 flex">
+    <div
+      className={`min-h-screen text-gray-900 bg-gray-50 flex ${
+        sidebarOpen ? "" : "w-full"
+      }`}
+    >
       {/* Sidebar */}
-      <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
-        <div className="p-4 border-b border-gray-200">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900 flex items-center">
-              <MessageSquare className="h-5 w-5 mr-2" />
-              Query History
-            </h2>
-            <div className="flex space-x-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={exportChatHistory}
-                disabled={chatHistory.length === 0}
-              >
-                <Download className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearChatHistory}
-                disabled={chatHistory.length === 0}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-
-          {/* Language Selection */}
-          <div className="mb-4">
-            <label className="text-sm font-medium text-gray-700 mb-2 block">
-              Translation Language
-            </label>
-            <select
-              value={targetLanguage}
-              onChange={(e) => setTargetLanguage(e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded-md text-sm"
-            >
-              <option value="ta">Tamil</option>
-              <option value="hi">Hindi</option>
-              <option value="es">Spanish</option>
-              <option value="fr">French</option>
-              <option value="de">German</option>
-              <option value="zh">Chinese</option>
-              <option value="ja">Japanese</option>
-            </select>
-          </div>
-
-          <div className="text-sm text-gray-600">
-            {chatHistory.length} queries from Qdrant DB
-          </div>
-        </div>
-
-        <ScrollArea className="flex-1 p-4">
-          {chatHistory.length === 0 ? (
-            <div className="text-center text-gray-500 mt-8">
-              <Database className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p className="text-sm">No queries yet</p>
-              <p className="text-xs mt-1">
-                Your Qdrant database queries will appear here
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {chatHistory.map((item) => (
-                <Card
-                  key={item.id}
-                  className="p-3 hover:shadow-md transition-shadow cursor-pointer"
+      {sidebarOpen && (
+        <div className="w-80 bg-white border-r border-gray-200 flex flex-col transition-all duration-300">
+          <div className="p-4 border-b border-gray-200">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center">
+                <MessageSquare className="h-5 w-5 mr-2" />
+                Query History
+              </h2>
+              <div className="flex space-x-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={exportChatHistory}
+                  disabled={chatHistory.length === 0}
                 >
-                  <div className="space-y-2">
-                    <div className="flex items-start justify-between">
-                      <p className="text-sm font-medium text-gray-900 line-clamp-2">
-                        {item.query}
-                      </p>
-                      <Badge
-                        variant="secondary"
-                        className={`ml-2 ${getAgentColor(item.agent_type)}`}
-                      >
-                        <div className="flex items-center">
-                          {getAgentIcon(item.agent_type)}
-                          <span className="ml-1 text-xs">
-                            {item.agent_type}
-                          </span>
-                        </div>
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-gray-600 line-clamp-3">
-                      {item.answer}
-                    </p>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-400">
-                        {item.timestamp.toLocaleTimeString()}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => copyToClipboard(item.answer, item.id)}
-                        className="h-6 w-6 p-0"
-                      >
-                        {copiedId === item.id ? (
-                          <Check className="h-3 w-3 text-green-500" />
-                        ) : (
-                          <Copy className="h-3 w-3" />
-                        )}
-                      </Button>
-                    </div>
-                    {item.user_email && (
-                      <div className="mt-2">
-                        <img
-                          src={item.user_email || "/placeholder.svg"}
-                          alt="Generated content"
-                          className="max-w-full h-auto rounded border"
-                        />
-                      </div>
-                    )}
-                  </div>
-                </Card>
-              ))}
+                  <Download className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearChatHistory}
+                  disabled={chatHistory.length === 0}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
-          )}
-        </ScrollArea>
-      </div>
+
+            {/* Language Selection */}
+            <div className="mb-4">
+              <label className="text-sm font-medium text-gray-700 mb-2 block">
+                Translation Language
+              </label>
+              <select
+                value={targetLanguage}
+                onChange={(e) => setTargetLanguage(e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded-md text-sm"
+              >
+                <option value="ta">Tamil</option>
+                <option value="hi">Hindi</option>
+                <option value="es">Spanish</option>
+                <option value="fr">French</option>
+                <option value="de">German</option>
+                <option value="zh">Chinese</option>
+                <option value="ja">Japanese</option>
+              </select>
+            </div>
+
+            <div className="text-sm text-gray-600">
+              {chatHistory.length} queries from Qdrant DB
+            </div>
+          </div>
+
+          <ScrollArea className="flex-1 p-4">
+            {chatHistory.length === 0 ? (
+              <div className="text-center text-gray-500 mt-8">
+                <Database className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p className="text-sm">No queries yet</p>
+                <p className="text-xs mt-1">
+                  Your Qdrant database queries will appear here
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {chatHistory.map((item) => (
+                  <Card
+                    key={item.id}
+                    className="p-3 hover:shadow-md transition-shadow cursor-pointer"
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-start justify-between">
+                        <p className="text-sm font-medium text-gray-900 line-clamp-2">
+                          {item.query}
+                        </p>
+                        <Badge
+                          variant="secondary"
+                          className={`ml-2 ${getAgentColor(item.agent_type)}`}
+                        >
+                          <div className="flex items-center">
+                            {getAgentIcon(item.agent_type)}
+                            <span className="ml-1 text-xs">
+                              {item.agent_type}
+                            </span>
+                          </div>
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-gray-600 line-clamp-3">
+                        {item.answer}
+                      </p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-400">
+                          {item.timestamp.toLocaleTimeString()}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => copyToClipboard(item.answer, item.id)}
+                          className="h-6 w-6 p-0"
+                        >
+                          {copiedId === item.id ? (
+                            <Check className="h-3 w-3 text-green-500" />
+                          ) : (
+                            <Copy className="h-3 w-3" />
+                          )}
+                        </Button>
+                      </div>
+                      {item.image_path?.trim() && (
+                        <div className="mt-2">
+                          <img
+                            src={item.image_path?.trim() || "/placeholder.svg"}
+                            alt="Generated content"
+                            onError={(e) =>
+                              (e.currentTarget.src = "/placeholder.svg")
+                            }
+                            className="max-w-full h-auto rounded border"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+        </div>
+      )}
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col">
@@ -397,12 +412,25 @@ export default function ChatPage() {
             <div className="flex items-center">
               <Button
                 variant="ghost"
+                size="icon"
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="mr-2"
+              >
+                {sidebarOpen ? (
+                  <X className="h-5 w-5" />
+                ) : (
+                  <Menu className="h-5 w-5" />
+                )}
+              </Button>
+              <Button
+                variant="ghost"
                 onClick={() => router.push("/dashboard")}
                 className="mr-4"
               >
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back to Dashboard
               </Button>
+
               <div className="flex items-center">
                 <Bot className="h-6 w-6 mr-2 text-blue-600" />
                 <h1 className="text-2xl font-bold text-gray-900">
@@ -410,16 +438,14 @@ export default function ChatPage() {
                 </h1>
               </div>
             </div>
+
             <div className="flex items-centerspace-x-4">
-              <Badge
-                variant="outline"
-                className="flex items-center text-gray-900 "
-              >
-                <Database className="h-3 w-3 mr-1 text-gray-900 " />
+              <Badge className="flex items-center border-2 border-dashed border-gray-400  text-gray-900 ">
+                <Database className="h-3 w-3  mr-1 text-gray-900 " />
                 Qdrant Connected
               </Badge>
-              <div className="text-sm text-gray-600">{session?.user?.name}</div>
             </div>
+            <div className="text-sm text-gray-600">{session?.user?.name}</div>
           </div>
         </header>
 
@@ -508,14 +534,15 @@ export default function ChatPage() {
                     </div>
                   )}
 
-                  {message.user_email && (
-                    <div className="mt-3">
-                      <img
-                        src={message.user_email || "/placeholder.svg"}
-                        alt="Generated content"
-                        className="max-w-full h-auto rounded border"
-                      />
-                    </div>
+                  {message.image_path?.trim() && (
+                    <img
+                      src={message.image_path}
+                      alt="Generated content"
+                      onError={(e) =>
+                        (e.currentTarget.src = "/placeholder.svg")
+                      }
+                      className="max-w-full h-auto rounded border"
+                    />
                   )}
 
                   <div className="text-xs opacity-75 mt-2">
@@ -557,7 +584,7 @@ export default function ChatPage() {
         <div className="border-t border-gray-200 p-4 bg-white">
           <div className="max-w-4xl mx-auto">
             <div className="flex space-x-4">
-              <div className="flex-1">
+              <div className="flex-1 background-gray-100">
                 <Input
                   ref={inputRef}
                   value={inputMessage}
@@ -565,7 +592,7 @@ export default function ChatPage() {
                   onKeyPress={handleKeyPress}
                   placeholder="Ask me anything about your uploaded documents..."
                   disabled={isLoading}
-                  className="w-full"
+                  className="w-full bg-white text-gray-900"
                 />
               </div>
               <Button
