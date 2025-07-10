@@ -22,6 +22,12 @@ import {
   Download,
   Copy,
   Check,
+  Volume2,
+  VolumeX,
+  Pause,
+  Settings,
+  Loader2,
+  AlertCircle,
 } from "lucide-react";
 import { Menu, X } from "lucide-react";
 
@@ -35,6 +41,9 @@ interface Message {
   translated?: boolean;
   original_text?: string;
   image_path?: string;
+  isGeneratingAudio?: boolean;
+  isPlaying?: boolean;
+  audioUrl?: string;
 }
 
 interface ChatHistory {
@@ -47,11 +56,15 @@ interface ChatHistory {
   image_path?: string;
 }
 
+const ELEVENLABS_VOICES = [
+  { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel (Female, American)" },
+  { id: "CxUF1MnX2dESXqaELxCQ", name: "Bharathi (Male, Coimbatore)" },
+];
+
 export default function ChatPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(true);
-
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome",
@@ -69,6 +82,28 @@ export default function ChatPage() {
   const [isTranslating, setIsTranslating] = useState(false);
   const [targetLanguage, setTargetLanguage] = useState("ta");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [showVoiceSettings, setShowVoiceSettings] = useState(false);
+  const [availableVoices, setAvailableVoices] = useState<
+    SpeechSynthesisVoice[]
+  >([]);
+  const [currentSpeech, setCurrentSpeech] =
+    useState<SpeechSynthesisUtterance | null>(null);
+  const [currentAudio, setCurrentAudio] = useState<HTMLAudioElement | null>(
+    null
+  );
+  const [ttsError, setTtsError] = useState<string | null>(null);
+
+  const [voiceSettings, setVoiceSettings] = useState({
+    enabled: true,
+    autoPlay: true,
+    useElevenLabs: true,
+    elevenLabsVoice: "CxUF1MnX2dESXqaELxCQ",
+    voice: "",
+    rate: 1,
+    pitch: 1,
+    volume: 1,
+  });
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -81,40 +116,409 @@ export default function ChatPage() {
     scrollToBottom();
   }, [messages]);
 
+  useEffect(() => {
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      setAvailableVoices(voices);
+      if (voices.length > 0 && !voiceSettings.voice) {
+        const defaultVoice =
+          voices.find((v) => v.lang.startsWith("en")) || voices[0];
+        setVoiceSettings((prev) => ({ ...prev, voice: defaultVoice.name }));
+      }
+    };
+    loadVoices();
+    window.speechSynthesis.addEventListener("voiceschanged", loadVoices);
+    return () => {
+      window.speechSynthesis.removeEventListener("voiceschanged", loadVoices);
+    };
+  }, []);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  if (status === "loading" || !session) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-gray-900"></div>
-      </div>
+  const stopAllAudio = () => {
+    if (currentAudio) {
+      currentAudio.pause();
+      setCurrentAudio(null);
+    }
+    if (currentSpeech) {
+      window.speechSynthesis.cancel();
+      setCurrentSpeech(null);
+    }
+  };
+
+  const toggleSpeech = async (id: string, text: string) => {
+    stopAllAudio();
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === id ? { ...msg, isGeneratingAudio: true } : msg
+      )
     );
-  }
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, voice_id: voiceSettings.elevenLabsVoice }),
+      });
+      if (!res.ok) throw new Error("Failed to fetch ElevenLabs audio");
+      const blob = await res.blob();
+      const audioUrl = URL.createObjectURL(blob);
+      const audio = new Audio(audioUrl);
+      setCurrentAudio(audio);
+      audio.onended = () =>
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === id
+              ? { ...msg, isGeneratingAudio: false, isPlaying: false }
+              : msg
+          )
+        );
+      audio.play();
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === id
+            ? { ...msg, isGeneratingAudio: false, isPlaying: true }
+            : msg
+        )
+      );
+    } catch (error) {
+      console.error("Speech error:", error);
+      setTtsError(
+        "Failed to generate voice. Please check ElevenLabs or try again."
+      );
+    }
+  };
+
+  const speakWithBrowser = (text: string, id: string) => {
+    stopAllAudio();
+    const utter = new SpeechSynthesisUtterance(text);
+    const browserVoice = availableVoices.find(
+      (v) => v.name === voiceSettings.voice
+    );
+    if (browserVoice) utter.voice = browserVoice;
+    utter.rate = voiceSettings.rate;
+    utter.pitch = voiceSettings.pitch;
+    utter.volume = voiceSettings.volume;
+    utter.onend = () =>
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === id
+            ? { ...msg, isGeneratingAudio: false, isPlaying: false }
+            : msg
+        )
+      );
+    window.speechSynthesis.speak(utter);
+    setCurrentSpeech(utter);
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === id
+          ? { ...msg, isGeneratingAudio: false, isPlaying: true }
+          : msg
+      )
+    );
+  };
+
+  // const handleSendMessage = async () => {
+  //   if (!inputMessage.trim() || isLoading) return;
+  //   const userMessage: Message = {
+  //     id: Date.now().toString(),
+  //     content: inputMessage,
+  //     sender: "user",
+  //     timestamp: new Date(),
+  //   };
+  //   setMessages((prev) => [...prev, userMessage]);
+  //   setInputMessage("");
+  //   setIsLoading(true);
+  //   try {
+  //     const response = await fetch("http://localhost:5000/query", {
+  //       method: "POST",
+  //       headers: { "Content-Type": "application/json" },
+  //       body: JSON.stringify({
+  //         query: userMessage.content,
+  //         selectedFile,
+  //         user_email: session?.user?.email || "anonymous",
+  //       }),
+  //     });
+  //     const data = await response.json();
+  //     const botMessage: Message = {
+  //
+  //       content: data.answer,
+  //       sender: "bot",
+  //       timestamp: new Date(),
+  //       agent_type: data.agent_type,
+  //     };
+  //     setMessages((prev) => [...prev, botMessage]);
+  //     if (voiceSettings.enabled && voiceSettings.autoPlay) {
+  //       voiceSettings.useElevenLabs
+  //         ? toggleSpeech(botMessage.id, botMessage.content)
+  //         : speakWithBrowser(botMessage.content, botMessage.id);
+  //     }
+  //   } catch (error) {
+  //     console.error("Error sending message:", error);
+  //   } finally {
+  //     setIsLoading(false);
+  //   }
+  // };
+
+  const generateElevenLabsAudio = async (text: string, messageId: string) => {
+    try {
+      setTtsError(null);
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId ? { ...msg, isGeneratingAudio: true } : msg
+        )
+      );
+
+      const response = await fetch("http://localhost:5000/text-to-speech", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text: text,
+          voice_id: voiceSettings.elevenLabsVoice,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response
+          .json()
+          .catch(() => ({ error: "Unknown error" }));
+        throw new Error(
+          errorData.error || `HTTP error! status: ${response.status}`
+        );
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId
+            ? { ...msg, audioUrl, isGeneratingAudio: false }
+            : msg
+        )
+      );
+
+      return audioUrl;
+    } catch (error) {
+      console.error("ElevenLabs TTS error:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error occurred";
+      setTtsError(`ElevenLabs TTS failed: ${errorMessage}`);
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId ? { ...msg, isGeneratingAudio: false } : msg
+        )
+      );
+      return null;
+    }
+  };
+
+  const generateSimpleTTS = async (text: string, messageId: string) => {
+    try {
+      setTtsError(null);
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId ? { ...msg, isGeneratingAudio: true } : msg
+        )
+      );
+
+      const response = await fetch(
+        "http://localhost:5000/text-to-speech-simple",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            text: text,
+            lang: "en",
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId
+            ? { ...msg, audioUrl, isGeneratingAudio: false }
+            : msg
+        )
+      );
+
+      return audioUrl;
+    } catch (error) {
+      console.error("Simple TTS error:", error);
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId ? { ...msg, isGeneratingAudio: false } : msg
+        )
+      );
+      return null;
+    }
+  };
+
+  const speakTextBrowser = (text: string, messageId?: string) => {
+    if (!text.trim()) return;
+
+    speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    const selectedVoice = availableVoices.find(
+      (voice) => voice.name === voiceSettings.voice
+    );
+
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
+    }
+
+    utterance.rate = voiceSettings.rate;
+    utterance.pitch = voiceSettings.pitch;
+    utterance.volume = voiceSettings.volume;
+
+    utterance.onstart = () => {
+      setCurrentSpeech(utterance);
+      if (messageId) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === messageId ? { ...msg, isPlaying: true } : msg
+          )
+        );
+      }
+    };
+
+    utterance.onend = () => {
+      setCurrentSpeech(null);
+      if (messageId) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === messageId ? { ...msg, isPlaying: false } : msg
+          )
+        );
+      }
+    };
+
+    utterance.onerror = () => {
+      setCurrentSpeech(null);
+      if (messageId) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === messageId ? { ...msg, isPlaying: false } : msg
+          )
+        );
+      }
+    };
+
+    speechSynthesis.speak(utterance);
+  };
+
+  const playAudio = async (audioUrl: string, messageId: string) => {
+    try {
+      if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.src = "";
+      }
+
+      const audio = new Audio(audioUrl);
+      audio.volume = voiceSettings.volume;
+      setCurrentAudio(audio);
+
+      audio.onplay = () => {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === messageId ? { ...msg, isPlaying: true } : msg
+          )
+        );
+      };
+
+      audio.onended = () => {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === messageId ? { ...msg, isPlaying: false } : msg
+          )
+        );
+        setCurrentAudio(null);
+      };
+
+      audio.onerror = () => {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === messageId ? { ...msg, isPlaying: false } : msg
+          )
+        );
+        setCurrentAudio(null);
+      };
+
+      await audio.play();
+    } catch (error) {
+      console.error("Audio playback error:", error);
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId ? { ...msg, isPlaying: false } : msg
+        )
+      );
+    }
+  };
+
+  const speakText = async (text: string, messageId?: string) => {
+    if (!voiceSettings.enabled || !text.trim()) return;
+
+    stopAllAudio();
+
+    if (messageId) {
+      const message = messages.find((msg) => msg.id === messageId);
+
+      // If we have cached audio, play it
+      if (message?.audioUrl) {
+        await playAudio(message.audioUrl, messageId);
+        return;
+      }
+
+      // Try ElevenLabs first if enabled
+      if (voiceSettings.useElevenLabs) {
+        const audioUrl = await generateElevenLabsAudio(text, messageId);
+        if (audioUrl) {
+          await playAudio(audioUrl, messageId);
+          return;
+        }
+        // If ElevenLabs fails, try simple TTS
+        const simpleAudioUrl = await generateSimpleTTS(text, messageId);
+        if (simpleAudioUrl) {
+          await playAudio(simpleAudioUrl, messageId);
+          return;
+        }
+      }
+    }
+
+    // Fallback to browser TTS
+    speakTextBrowser(text, messageId);
+  };
 
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return;
-
     const userMessage: Message = {
       id: Date.now().toString(),
       content: inputMessage,
       sender: "user",
       timestamp: new Date(),
     };
-
     setMessages((prev) => [...prev, userMessage]);
     const currentQuery = inputMessage;
+
     setInputMessage("");
     setIsLoading(true);
-
     try {
-      // Send query to Flask backend
       const response = await fetch("http://localhost:5000/query", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query: currentQuery,
           ...(selectedFile?.trim() && { selectedFile }), // only include if not empty
@@ -125,27 +529,27 @@ export default function ChatPage() {
           user_email: session?.user?.email || "anonymous",
         }),
       });
-
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-
       const data = await response.json();
-
       const botMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content:
-          data.answer || "I couldn't process your request. Please try again.",
         sender: "bot",
         timestamp: new Date(),
         agent_type: data.agent_type,
         user_email: data.user_email,
         image_path: data.image_path || "",
+        id: (Date.now() + 1).toString(),
+        content:
+          data.answer || "I couldn't process your request. Please try again.",
       };
-
       setMessages((prev) => [...prev, botMessage]);
 
-      // Add to chat history for sidebar (only if it's a Qdrant retrieval)
+      // if (voiceSettings.enabled && voiceSettings.autoPlay) {
+      //   voiceSettings.useElevenLabs
+      //     ? toggleSpeech(botMessage.id, botMessage.content)
+      //     : speakWithBrowser(botMessage.content, botMessage.id);
+      // }
       if (data.answer && data.agent_type) {
         const historyItem: ChatHistory = {
           id: Date.now().toString(),
@@ -201,10 +605,18 @@ export default function ChatPage() {
                 content: data.translated_text,
                 translated: true,
                 original_text: text,
+                audioUrl: undefined, // Clear cached audio for new text
               }
             : msg
         )
       );
+
+      // Auto-play translated text if voice is enabled and auto-play is on
+      if (voiceSettings.enabled && voiceSettings.autoPlay) {
+        setTimeout(() => {
+          speakText(data.translated_text, messageId);
+        }, 500);
+      }
     } catch (error) {
       console.error("Translation error:", error);
     } finally {
@@ -305,6 +717,204 @@ export default function ChatPage() {
               </div>
             </div>
 
+            {/* TTS Error Display */}
+            {ttsError && (
+              <div className="mb-4 p-2 bg-red-50 border border-red-200 rounded-md">
+                <div className="flex items-center">
+                  <AlertCircle className="h-4 w-4 text-red-500 mr-2" />
+                  <span className="text-xs text-red-700">{ttsError}</span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setTtsError(null)}
+                  className="mt-1 h-6 text-xs"
+                >
+                  Dismiss
+                </Button>
+              </div>
+            )}
+
+            {/* Voice Settings */}
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-gray-700">
+                  Voice Settings
+                </label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowVoiceSettings((prev) => !prev)}
+                >
+                  <Settings className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {voiceSettings && (
+                <div className="space-y-3 p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Enable Voice</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        setVoiceSettings((prev) => ({
+                          ...prev,
+                          enabled: !prev.enabled,
+                        }))
+                      }
+                    >
+                      {voiceSettings.enabled ? (
+                        <Volume2 className="h-4 w-4" />
+                      ) : (
+                        <VolumeX className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+
+                  {/* <div className="flex items-center justify-between">
+                    <span className="text-sm">Auto-play Responses</span>
+                    <input
+                      type="checkbox"
+                      checked={voiceSettings.autoPlay}
+                      onChange={(e) =>
+                        setVoiceSettings((prev) => ({
+                          ...prev,
+                          autoPlay: e.target.checked,
+                        }))
+                      }
+                      className="rounded"
+                    />
+                  </div> */}
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Use ElevenLabs</span>
+                    <input
+                      type="checkbox"
+                      checked={voiceSettings.useElevenLabs}
+                      onChange={(e) =>
+                        setVoiceSettings((prev) => ({
+                          ...prev,
+                          useElevenLabs: e.target.checked,
+                        }))
+                      }
+                      className="rounded"
+                    />
+                  </div>
+
+                  {voiceSettings.useElevenLabs ? (
+                    <div>
+                      <label className="text-xs text-gray-600">
+                        ElevenLabs Voice
+                      </label>
+                      <select
+                        value={voiceSettings.elevenLabsVoice}
+                        onChange={(e) =>
+                          setVoiceSettings((prev) => ({
+                            ...prev,
+                            elevenLabsVoice: e.target.value,
+                          }))
+                        }
+                        className="w-full p-1 border border-gray-300 rounded text-xs"
+                      >
+                        {ELEVENLABS_VOICES.map((voice) => (
+                          <option key={voice.id} value={voice.id}>
+                            {voice.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="text-xs text-gray-600">
+                        Browser Voice
+                      </label>
+                      <select
+                        value={voiceSettings.voice}
+                        onChange={(e) =>
+                          setVoiceSettings((prev) => ({
+                            ...prev,
+                            voice: e.target.value,
+                          }))
+                        }
+                        className="w-full p-1 border border-gray-300 rounded text-xs"
+                      >
+                        {availableVoices.map((voice) => (
+                          <option key={voice.name} value={voice.name}>
+                            {voice.name} ({voice.lang})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {!voiceSettings.useElevenLabs && (
+                    <>
+                      <div>
+                        <label className="text-xs text-gray-600">
+                          Speed: {voiceSettings.rate}
+                        </label>
+                        <input
+                          type="range"
+                          min="0.5"
+                          max="2"
+                          step="0.1"
+                          value={voiceSettings.rate}
+                          onChange={(e) =>
+                            setVoiceSettings((prev) => ({
+                              ...prev,
+                              rate: Number.parseFloat(e.target.value),
+                            }))
+                          }
+                          className="w-full"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs text-gray-600">
+                          Pitch: {voiceSettings.pitch}
+                        </label>
+                        <input
+                          type="range"
+                          min="0.5"
+                          max="2"
+                          step="0.1"
+                          value={voiceSettings.pitch}
+                          onChange={(e) =>
+                            setVoiceSettings((prev) => ({
+                              ...prev,
+                              pitch: Number.parseFloat(e.target.value),
+                            }))
+                          }
+                          className="w-full"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  <div>
+                    <label className="text-xs text-gray-600">
+                      Volume: {Math.round(voiceSettings.volume * 100)}%
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                      value={voiceSettings.volume}
+                      onChange={(e) =>
+                        setVoiceSettings((prev) => ({
+                          ...prev,
+                          volume: Number.parseFloat(e.target.value),
+                        }))
+                      }
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Language Selection */}
             <div className="mb-4">
               <label className="text-sm font-medium text-gray-700 mb-2 block">
@@ -370,18 +980,32 @@ export default function ChatPage() {
                         <span className="text-xs text-gray-400">
                           {item.timestamp.toLocaleTimeString()}
                         </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => copyToClipboard(item.answer, item.id)}
-                          className="h-6 w-6 p-0"
-                        >
-                          {copiedId === item.id ? (
-                            <Check className="h-3 w-3 text-green-500" />
-                          ) : (
-                            <Copy className="h-3 w-3" />
+                        <div className="flex space-x-1">
+                          {voiceSettings.enabled && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => speakText(item.answer)}
+                              className="h-6 w-6 p-0"
+                            >
+                              <Volume2 className="h-3 w-3" />
+                            </Button>
                           )}
-                        </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              copyToClipboard(item.answer, item.id)
+                            }
+                            className="h-6 w-6 p-0"
+                          >
+                            {copiedId === item.id ? (
+                              <Check className="h-3 w-3 text-green-500" />
+                            ) : (
+                              <Copy className="h-3 w-3" />
+                            )}
+                          </Button>
+                        </div>
                       </div>
                       {item.image_path?.trim() && (
                         <div className="mt-2">
@@ -430,7 +1054,6 @@ export default function ChatPage() {
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back to Dashboard
               </Button>
-
               <div className="flex items-center">
                 <Bot className="h-6 w-6 mr-2 text-blue-600" />
                 <h1 className="text-2xl font-bold text-gray-900">
@@ -438,14 +1061,14 @@ export default function ChatPage() {
                 </h1>
               </div>
             </div>
-
-            <div className="flex items-centerspace-x-4">
-              <Badge className="flex items-center border-2 border-dashed border-gray-400  text-gray-900 ">
-                <Database className="h-3 w-3  mr-1 text-gray-900 " />
+            <div className="flex items-center space-x-4">
+              <Badge className="flex items-center border-2 border-dashed border-gray-400 text-gray-900">
+                <Database className="h-3 w-3 mr-1 text-gray-900" />
                 Qdrant Connected
               </Badge>
+
+              <div className="text-sm text-gray-600">{session?.user?.name}</div>
             </div>
-            <div className="text-sm text-gray-600">{session?.user?.name}</div>
           </div>
         </header>
 
@@ -490,6 +1113,25 @@ export default function ChatPage() {
                     <div className="flex items-center space-x-1">
                       {message.sender === "bot" && (
                         <>
+                          {voiceSettings.enabled && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                toggleSpeech(message.id, message.content)
+                              }
+                              disabled={message.isGeneratingAudio}
+                              className="h-6 w-6 p-0"
+                            >
+                              {message.isGeneratingAudio ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : message.isPlaying ? (
+                                <Pause className="h-3 w-3" />
+                              ) : (
+                                <Volume2 className="h-3 w-3" />
+                              )}
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
@@ -605,7 +1247,20 @@ export default function ChatPage() {
             </div>
             <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
               <span>Press Enter to send, Shift+Enter for new line</span>
-              <span>Connected to Qdrant Vector Database</span>
+              <div className="flex items-center space-x-4">
+                {(currentSpeech || currentAudio) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={stopAllAudio}
+                    className="text-xs"
+                  >
+                    <VolumeX className="h-3 w-3 mr-1" />
+                    Stop Speech
+                  </Button>
+                )}
+                <span>Connected to Qdrant Vector Database</span>
+              </div>
             </div>
           </div>
         </div>
