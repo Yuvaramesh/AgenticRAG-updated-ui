@@ -1,4 +1,4 @@
-import { type NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,8 +16,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Use provided voice_id or default to your selected voice
-    const voiceId = voice_id || "CxUF1MnX2dESXqaELxCQ";
+    const voiceId = voice_id || "CxUF1MnX2dESXqaELxCQ"; // Default voice
 
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
@@ -29,7 +28,7 @@ export async function POST(req: NextRequest) {
         },
         body: JSON.stringify({
           text,
-          model_id: "eleven_multilingual_v2", // Supports Tamil and other languages
+          model_id: "eleven_multilingual_v2", // Supports multilingual including Tamil
           voice_settings: {
             stability: 0.5,
             similarity_boost: 0.5,
@@ -42,7 +41,7 @@ export async function POST(req: NextRequest) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("ElevenLabs TTS error:", errorText);
+      console.error("ElevenLabs API error:", errorText);
       return NextResponse.json(
         { error: `ElevenLabs API error: ${errorText}` },
         { status: response.status }
@@ -56,7 +55,7 @@ export async function POST(req: NextRequest) {
       headers: {
         "Content-Type": "audio/mpeg",
         "Content-Disposition": "inline; filename=speech.mp3",
-        "Cache-Control": "public, max-age=3600", // Cache for 1 hour
+        "Cache-Control": "public, max-age=3600",
       },
     });
   } catch (error) {

@@ -162,18 +162,9 @@ export default function ChatPage() {
         body: JSON.stringify({ text, voice_id: voiceSettings.elevenLabsVoice }),
       });
       if (!res.ok) throw new Error("Failed to fetch ElevenLabs audio");
-      const blob = await res.blob();
-      const audioUrl = URL.createObjectURL(blob);
+      const audioBlob = await res.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
       const audio = new Audio(audioUrl);
-      setCurrentAudio(audio);
-      audio.onended = () =>
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === id
-              ? { ...msg, isGeneratingAudio: false, isPlaying: false }
-              : msg
-          )
-        );
       audio.play();
       setMessages((prev) =>
         prev.map((msg) =>

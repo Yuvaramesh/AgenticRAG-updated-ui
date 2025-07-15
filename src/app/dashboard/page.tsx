@@ -19,7 +19,7 @@ export default function DashboardPage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (status === "loading") return; // Still loading
+    if (status === "loading") return;
     if (!session) router.push("/login");
   }, [session, status, router]);
 
@@ -31,9 +31,10 @@ export default function DashboardPage() {
     );
   }
 
-  if (!session) {
-    return null;
-  }
+  if (!session) return null;
+
+  const role = session.user?.role;
+  const isStudent = role === "student";
 
   const handleSignOut = () => {
     signOut({ callbackUrl: "/login" });
@@ -56,7 +57,7 @@ export default function DashboardPage() {
                 </span>
               </div>
               <Button variant="outline" size="sm" onClick={handleSignOut}>
-                <LogOut className="h-4 w-4 mr-2 " />
+                <LogOut className="h-4 w-4 mr-2" />
                 Sign Out
               </Button>
             </div>
@@ -76,37 +77,39 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl">
-          {/* Upload Card */}
-          <Card
-            className="hover:shadow-lg transition-shadow cursor-pointer group"
-            onClick={() => router.push("/upload")}
-          >
-            <CardHeader className="text-center pb-4">
-              <div className="mx-auto w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition-colors">
-                <Upload className="h-6 w-6 text-blue-600" />
-              </div>
-              <CardTitle className="text-xl text-gray-900">
-                Upload Files
-              </CardTitle>
-              <CardDescription className="text-gray-900">
-                Upload and manage your documents, images, and other files
-                securely.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button
-                className="w-full text-gray-900"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  router.push("/upload");
-                }}
-              >
-                Start Uploading
-              </Button>
-            </CardContent>
-          </Card>
+          {/* Conditionally render Upload card for non-students */}
+          {!isStudent && (
+            <Card
+              className="hover:shadow-lg transition-shadow cursor-pointer group"
+              onClick={() => router.push("/upload")}
+            >
+              <CardHeader className="text-center pb-4">
+                <div className="mx-auto w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition-colors">
+                  <Upload className="h-6 w-6 text-blue-600" />
+                </div>
+                <CardTitle className="text-xl text-gray-900">
+                  Upload Files
+                </CardTitle>
+                <CardDescription className="text-gray-900">
+                  Upload and manage your documents, images, and other files
+                  securely.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  className="w-full text-gray-900"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    router.push("/upload");
+                  }}
+                >
+                  Start Uploading
+                </Button>
+              </CardContent>
+            </Card>
+          )}
 
-          {/* Chat Card */}
+          {/* Chat Card for everyone */}
           <Card
             className="hover:shadow-lg transition-shadow text-gray-900 cursor-pointer group"
             onClick={() => router.push("/chat")}
