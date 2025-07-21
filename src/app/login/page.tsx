@@ -116,7 +116,7 @@ export default function LoginPage() {
 
           <Separator className="my-4" />
 
-          <div className="space-y-4">
+          {/* <div className="space-y-4">
             <Button
               variant="outline"
               className="w-full bg-transparent"
@@ -144,7 +144,7 @@ export default function LoginPage() {
               )}
               Continue with GitHub
             </Button>
-          </div>
+          </div> */}
         </CardContent>
       </Card>
     </div>
