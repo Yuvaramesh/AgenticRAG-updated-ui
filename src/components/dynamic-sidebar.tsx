@@ -1,103 +1,139 @@
 "use client";
-import { useSession } from "next-auth/react";
-import {
-  Home,
-  Inbox,
-  User,
-  BookOpen,
-  GraduationCap,
-  BarChart,
-  Users,
-  Book,
-  FileText,
-  HelpCircle,
-  LogOut,
-} from "lucide-react";
 
+import { useSession } from "next-auth/react";
+import { usePathname } from "next/navigation";
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
-  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarRail,
-  SidebarSeparator,
 } from "@/components/ui/sidebar";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { ChevronDown } from "lucide-react";
+  Home,
+  Upload,
+  MessageCircle,
+  Users,
+  BookOpen,
+  BarChart3,
+  Settings,
+  FileText,
+  Calendar,
+} from "lucide-react";
 
 export function DynamicSidebar() {
   const { data: session } = useSession();
-  const userRole = session?.user?.role;
+  const pathname = usePathname();
 
+  if (!session) return null;
+
+  const role = session.user?.role;
+
+  // Common items for all users
   const commonItems = [
-    { title: "Home", url: "/dashboard", icon: Home },
-    { title: "Chat", url: "/chat", icon: Inbox },
-    { title: "Upload", url: "/upload", icon: FileText },
+    {
+      title: "Dashboard",
+      url: "/dashboard",
+      icon: Home,
+    },
   ];
 
+  // Admin-specific items - Full Access
   const adminItems = [
-    { title: "Users", url: "/admin/users", icon: Users },
-    { title: "Sections", url: "/admin/sections", icon: BookOpen },
-    { title: "Quizzes", url: "/admin/quizzes", icon: Book },
+    {
+      title: "Manage Users",
+      url: "/admin/users",
+      icon: Users,
+    },
+    {
+      title: "Upload Files",
+      url: "/upload",
+      icon: Upload,
+    },
+    {
+      title: "Chat Assistant",
+      url: "/chat",
+      icon: MessageCircle,
+    },
+    {
+      title: "Manage Quizzes",
+      url: "/teacher/quizzes",
+      icon: BookOpen,
+    },
+    {
+      title: "Publish Content",
+      url: "/teacher/publish",
+      icon: Calendar,
+    },
+    {
+      title: "View Analytics",
+      url: "/student/report",
+      icon: BarChart3,
+    },
   ];
 
+  // Teacher-specific items - Quiz, Upload, Publish, Analytics
   const teacherItems = [
-    { title: "Sections", url: "/teacher/sections", icon: BookOpen },
-    { title: "Quizzes", url: "/teacher/quizzes", icon: Book },
-    { title: "Reports", url: "/teacher/reports", icon: BarChart },
+    {
+      title: "Manage Quizzes",
+      url: "/teacher/quizzes",
+      icon: BookOpen,
+    },
+    {
+      title: "Upload Files",
+      url: "/upload",
+      icon: Upload,
+    },
+    {
+      title: "Publish Content",
+      url: "/teacher/publish",
+      icon: Calendar,
+    },
+    {
+      title: "Analytics",
+      url: "/student/report",
+      icon: BarChart3,
+    },
   ];
 
+  // Student-specific items - Only Chat and Quiz
   const studentItems = [
-    { title: "Quizzes", url: "/student/quizzes", icon: GraduationCap },
-    { title: "Report", url: "/student/report", icon: BarChart },
+    {
+      title: "Chat Assistant",
+      url: "/chat",
+      icon: MessageCircle,
+    },
+    {
+      title: "Take Quizzes",
+      url: "/student/quizzes",
+      icon: FileText,
+    },
   ];
+
+  // Build navigation items based on role
+  let navigationItems = [...commonItems];
+
+  if (role === "admin") {
+    navigationItems = [...navigationItems, ...adminItems];
+  } else if (role === "teacher") {
+    navigationItems = [...navigationItems, ...teacherItems];
+  } else if (role === "student") {
+    navigationItems = [...navigationItems, ...studentItems];
+  }
 
   return (
-    <Sidebar>
-      <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <SidebarMenuButton>
-                  <User /> {session?.user?.name || "Guest"}
-                  <ChevronDown className="ml-auto" />
-                </SidebarMenuButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-[--radix-popper-anchor-width]">
-                <DropdownMenuItem>
-                  <span>Account</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <span>Settings</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <span>Sign out</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarHeader>
+    <Sidebar className="bg-white text-black">
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>General</SidebarGroupLabel>
+          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {commonItems.map((item) => (
+              {navigationItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
+                  <SidebarMenuButton asChild isActive={pathname === item.url}>
                     <a href={item.url}>
                       <item.icon />
                       <span>{item.title}</span>
@@ -109,96 +145,22 @@ export function DynamicSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {userRole === "admin" && (
-          <>
-            <SidebarSeparator />
-            <SidebarGroup>
-              <SidebarGroupLabel>Admin Tools</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {adminItems.map((item) => (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton asChild>
-                        <a href={item.url}>
-                          <item.icon />
-                          <span>{item.title}</span>
-                        </a>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          </>
-        )}
-
-        {userRole === "teacher" && (
-          <>
-            <SidebarSeparator />
-            <SidebarGroup>
-              <SidebarGroupLabel>Teacher Tools</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {teacherItems.map((item) => (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton asChild>
-                        <a href={item.url}>
-                          <item.icon />
-                          <span>{item.title}</span>
-                        </a>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          </>
-        )}
-
-        {userRole === "student" && (
-          <>
-            <SidebarSeparator />
-            <SidebarGroup>
-              <SidebarGroupLabel>Student Tools</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {studentItems.map((item) => (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton asChild>
-                        <a href={item.url}>
-                          <item.icon />
-                          <span>{item.title}</span>
-                        </a>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          </>
-        )}
+        <SidebarGroup>
+          <SidebarGroupLabel>Account</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <a href="/settings">
+                    <Settings />
+                    <span>Settings</span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild>
-              <a href="/help">
-                <HelpCircle />
-                <span>Help & Support</span>
-              </a>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild>
-              <a href="/api/auth/signout">
-                <LogOut />
-                <span>Sign Out</span>
-              </a>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
-      <SidebarRail />
     </Sidebar>
   );
 }

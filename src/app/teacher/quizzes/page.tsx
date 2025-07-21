@@ -28,6 +28,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Loader2,
   Plus,
   Edit,
@@ -46,23 +53,24 @@ import {
 } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/text-area";
+import { Alert, AlertDescription } from "@/components/ui/alert"; // Import Alert components
 
 interface Section {
-  id: string; // Changed to string
+  id: string;
   name: string;
 }
 
 interface Question {
-  id?: string; // Changed to string (if MongoDB generates _id for embedded docs)
+  id?: string;
   question_text: string;
   options: string[];
   correct_answer: string;
 }
 
 interface Quiz {
-  id: string; // Changed to string
+  id: string;
   title: string;
-  section_id: string; // Changed to string
+  section_id: string | null; // section_id can now be null
   is_enabled: boolean;
   questions?: Question[];
 }
@@ -77,7 +85,7 @@ export default function TeacherQuizzesPage() {
   const [editingQuiz, setEditingQuiz] = useState<Quiz | null>(null);
   const [newQuiz, setNewQuiz] = useState({
     title: "",
-    section_id: "",
+    section_id: null as string | null, // Initialize as null for select
     questions: [
       { question_text: "", options: ["", "", "", ""], correct_answer: "" },
     ] as Question[],
@@ -130,16 +138,17 @@ export default function TeacherQuizzesPage() {
   const handleCreateQuiz = async () => {
     setError(null);
     try {
+      const quizDataToSend = {
+        ...newQuiz,
+        section_id: newQuiz.section_id === "" ? null : newQuiz.section_id, // Send null if "No Section" is selected
+      };
       const response = await fetch("http://localhost:5000/api/quizzes", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "X-User-Email": session?.user?.email || "",
         },
-        body: JSON.stringify({
-          ...newQuiz,
-          // section_id is already string, no Number.parseInt needed
-        }),
+        body: JSON.stringify(quizDataToSend),
       });
       if (!response.ok) {
         const errorData = await response.json();
@@ -149,7 +158,7 @@ export default function TeacherQuizzesPage() {
       }
       setNewQuiz({
         title: "",
-        section_id: "",
+        section_id: null,
         questions: [
           { question_text: "", options: ["", "", "", ""], correct_answer: "" },
         ],
@@ -163,6 +172,10 @@ export default function TeacherQuizzesPage() {
   const handleUpdateQuiz = async (quiz: Quiz) => {
     setError(null);
     try {
+      const quizDataToSend = {
+        ...quiz,
+        section_id: quiz.section_id === "" ? null : quiz.section_id, // Send null if "No Section" is selected
+      };
       const response = await fetch(
         `http://localhost:5000/api/quizzes/${quiz.id}`,
         {
@@ -171,7 +184,7 @@ export default function TeacherQuizzesPage() {
             "Content-Type": "application/json",
             "X-User-Email": session?.user?.email || "",
           },
-          body: JSON.stringify(quiz),
+          body: JSON.stringify(quizDataToSend),
         }
       );
       if (!response.ok) {
@@ -188,7 +201,6 @@ export default function TeacherQuizzesPage() {
   };
 
   const handleEnableDisableQuiz = async (quizId: string, enable: boolean) => {
-    // Changed quizId type to string
     setError(null);
     try {
       const response = await fetch(
@@ -240,7 +252,7 @@ export default function TeacherQuizzesPage() {
   ) => {
     const target = editingQuiz || newQuiz;
     const setter = editingQuiz ? setEditingQuiz : setNewQuiz;
-    const updatedQuestions = [...target.questions];
+    const updatedQuestions = [...(target.questions || [])];
     (updatedQuestions[index] as any)[field] = value;
     setter({ ...target, questions: updatedQuestions } as any);
   };
@@ -252,7 +264,7 @@ export default function TeacherQuizzesPage() {
   ) => {
     const target = editingQuiz || newQuiz;
     const setter = editingQuiz ? setEditingQuiz : setNewQuiz;
-    const updatedQuestions = [...target.questions];
+    const updatedQuestions = [...(target.questions || [])];
     const updatedOptions = [...updatedQuestions[qIndex].options];
     updatedOptions[oIndex] = value;
     updatedQuestions[qIndex].options = updatedOptions;
@@ -262,12 +274,13 @@ export default function TeacherQuizzesPage() {
   const handleRemoveQuestion = (index: number) => {
     const target = editingQuiz || newQuiz;
     const setter = editingQuiz ? setEditingQuiz : setNewQuiz;
-    const updatedQuestions = target.questions.filter((_, i) => i !== index);
+    const updatedQuestions = (target.questions || []).filter(
+      (_, i) => i !== index
+    );
     setter({ ...target, questions: updatedQuestions } as any);
   };
 
   const handleViewQuiz = async (quizId: string) => {
-    // Changed quizId type to string
     setError(null);
     try {
       const response = await fetch(
@@ -311,10 +324,18 @@ export default function TeacherQuizzesPage() {
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Dashboard
           </Button>
-          <h1 className="text-2xl font-bold text-gray-900">Manage Quizzes</h1>
+          <h1 className="text-2xl font-bold text-white">Manage Quizzes</h1>
         </header>
 
         <main className="flex-1 py-8 px-4 sm:px-6 lg:px-8">
+          {error && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertDescription>
+                <strong className="font-bold">Error!</strong> {error}
+              </AlertDescription>
+            </Alert>
+          )}
+
           <Card className="mb-6">
             <CardHeader>
               <CardTitle>Create New Quiz</CardTitle>
@@ -331,17 +352,22 @@ export default function TeacherQuizzesPage() {
                 }
               />
               <Select
-                value={newQuiz.section_id}
+                value={newQuiz.section_id || "none"} // Use "none" string for Select component if null
                 onValueChange={(value) =>
-                  setNewQuiz({ ...newQuiz, section_id: value })
+                  setNewQuiz({
+                    ...newQuiz,
+                    section_id: value === "none" ? null : value,
+                  })
                 }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select Section" />
+                  <SelectValue placeholder="Select Section (Optional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  {sections.map((section) => (
-                    <SelectItem key={section.id} value={String(section.id)}>
+                  <SelectItem value="none">No Section (Optional)</SelectItem>{" "}
+                  {/* Added optional empty value */}
+                  {sections.map((section, index) => (
+                    <SelectItem key={index} value={section.id}>
                       {section.name}
                     </SelectItem>
                   ))}
@@ -407,16 +433,6 @@ export default function TeacherQuizzesPage() {
             </CardContent>
           </Card>
 
-          {error && (
-            <div
-              className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4"
-              role="alert"
-            >
-              <strong className="font-bold">Error!</strong>
-              <span className="block sm:inline"> {error}</span>
-            </div>
-          )}
-
           <Card>
             <CardHeader>
               <CardTitle>All Quizzes</CardTitle>
@@ -462,11 +478,11 @@ export default function TeacherQuizzesPage() {
                         <TableCell>
                           {editingQuiz?.id === quiz.id ? (
                             <Select
-                              value={editingQuiz.section_id}
+                              value={editingQuiz.section_id || "none"} // Use "none" string for Select component if null
                               onValueChange={(value) =>
                                 setEditingQuiz({
                                   ...editingQuiz,
-                                  section_id: value,
+                                  section_id: value === "none" ? null : value,
                                 })
                               }
                             >
@@ -474,19 +490,25 @@ export default function TeacherQuizzesPage() {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
+                                <SelectItem value="none">
+                                  No Section (Optional)
+                                </SelectItem>{" "}
+                                {/* Added optional empty value */}
                                 {sections.map((section) => (
                                   <SelectItem
                                     key={section.id}
-                                    value={String(section.id)}
+                                    value={section.id}
                                   >
                                     {section.name}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
-                          ) : (
+                          ) : quiz.section_id ? (
                             sections.find((s) => s.id === quiz.section_id)
                               ?.name || "N/A"
+                          ) : (
+                            "No Section"
                           )}
                         </TableCell>
                         <TableCell>
@@ -561,29 +583,25 @@ export default function TeacherQuizzesPage() {
             </CardContent>
           </Card>
 
-          {viewingQuiz && (
-            <Card className="mt-6">
-              <CardHeader>
-                <CardTitle>Viewing Quiz: {viewingQuiz.title}</CardTitle>
-                <CardDescription>
+          {/* Quiz Viewing Dialog */}
+          <Dialog
+            open={!!viewingQuiz}
+            onOpenChange={() => setViewingQuiz(null)}
+          >
+            <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Viewing Quiz: {viewingQuiz?.title}</DialogTitle>
+                <DialogDescription>
                   Section:{" "}
-                  {sections.find((s) => s.id === viewingQuiz.section_id)?.name}
-                </CardDescription>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="absolute top-4 right-4"
-                  onClick={() => setViewingQuiz(null)}
-                >
-                  <X className="h-5 w-5" />
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {viewingQuiz.questions?.map((q, qIndex) => (
-                  <div
-                    key={q.id || qIndex}
-                    className="border p-4 rounded-md space-y-2"
-                  >
+                  {viewingQuiz?.section_id
+                    ? sections.find((s) => s.id === viewingQuiz?.section_id)
+                        ?.name
+                    : "No Section"}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                {viewingQuiz?.questions?.map((q, qIndex) => (
+                  <div key={qIndex} className="border p-4 rounded-md space-y-2">
                     <p className="font-semibold">
                       Question {qIndex + 1}: {q.question_text}
                     </p>
@@ -603,9 +621,9 @@ export default function TeacherQuizzesPage() {
                     </ul>
                   </div>
                 ))}
-              </CardContent>
-            </Card>
-          )}
+              </div>
+            </DialogContent>
+          </Dialog>
         </main>
       </SidebarInset>
     </SidebarProvider>

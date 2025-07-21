@@ -27,7 +27,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Loader2, Plus, Edit, Trash2, Check, X, ArrowLeft } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Loader2, Plus, Edit, Trash2, ArrowLeft } from "lucide-react";
 import { DynamicSidebar } from "@/components/dynamic-sidebar";
 import {
   SidebarProvider,
@@ -35,13 +42,15 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert"; // Import Alert components
 
 interface User {
-  id: string; // Changed from number to string for MongoDB _id
-  email: string;
+  id: string;
   name: string;
+  email: string;
   role: string;
-  preferred_languages: string[];
+  created_at: string;
 }
 
 export default function AdminUsersPage() {
@@ -50,12 +59,13 @@ export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [newUser, setNewUser] = useState({
-    email: "",
     name: "",
+    email: "",
+    password: "",
     role: "student",
-    preferred_languages: [] as string[],
   });
 
   useEffect(() => {
@@ -72,16 +82,16 @@ export default function AdminUsersPage() {
     setError(null);
     try {
       const response = await fetch("http://localhost:5000/api/users", {
-        headers: {
-          "X-User-Email": session?.user?.email || "", // Mock header for backend auth
-        },
+        headers: { "X-User-Email": session?.user?.email || "" },
       });
       if (!response.ok) {
-        throw new Error(`Failed to fetch users: ${response.statusText}`);
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to fetch users");
       }
       const data = await response.json();
       setUsers(data);
     } catch (err: any) {
+      console.error("Error fetching users:", err); // Log the full error
       setError(err.message);
     } finally {
       setLoading(false);
@@ -101,71 +111,36 @@ export default function AdminUsersPage() {
       });
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(
-          errorData.message || `Failed to create user: ${response.statusText}`
-        );
+        throw new Error(errorData.message || "Failed to create user");
       }
-      setNewUser({
-        email: "",
-        name: "",
-        role: "student",
-        preferred_languages: [],
-      });
+      setNewUser({ name: "", email: "", password: "", role: "student" });
+      setShowCreateDialog(false);
       fetchUsers();
     } catch (err: any) {
-      setError(err.message);
-    }
-  };
-
-  const handleUpdateUser = async (user: User) => {
-    setError(null);
-    try {
-      const response = await fetch(
-        `http://localhost:5000/api/users/${user.id}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            "X-User-Email": session?.user?.email || "",
-          },
-          body: JSON.stringify(user),
-        }
-      );
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(
-          errorData.message || `Failed to update user: ${response.statusText}`
-        );
-      }
-      setEditingUser(null);
-      fetchUsers();
-    } catch (err: any) {
+      console.error("Error creating user:", err); // Log the full error
       setError(err.message);
     }
   };
 
   const handleDeleteUser = async (userId: string) => {
-    // Changed userId type to string
-    setError(null);
     if (!confirm("Are you sure you want to delete this user?")) return;
+
+    setError(null);
     try {
       const response = await fetch(
         `http://localhost:5000/api/users/${userId}`,
         {
           method: "DELETE",
-          headers: {
-            "X-User-Email": session?.user?.email || "",
-          },
+          headers: { "X-User-Email": session?.user?.email || "" },
         }
       );
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(
-          errorData.message || `Failed to delete user: ${response.statusText}`
-        );
+        throw new Error(errorData.message || "Failed to delete user");
       }
       fetchUsers();
     } catch (err: any) {
+      console.error("Error deleting user:", err); // Log the full error
       setError(err.message);
     }
   };
@@ -197,79 +172,28 @@ export default function AdminUsersPage() {
         </header>
 
         <main className="flex-1 py-8 px-4 sm:px-6 lg:px-8">
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle>Create New User</CardTitle>
-              <CardDescription>
-                Add a new user to the system with a specific role.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Input
-                placeholder="Email"
-                value={newUser.email}
-                onChange={(e) =>
-                  setNewUser({ ...newUser, email: e.target.value })
-                }
-              />
-              <Input
-                placeholder="Name"
-                value={newUser.name}
-                onChange={(e) =>
-                  setNewUser({ ...newUser, name: e.target.value })
-                }
-              />
-              <Select
-                value={newUser.role}
-                onValueChange={(value) =>
-                  setNewUser({ ...newUser, role: value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select Role" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="teacher">Teacher</SelectItem>
-                  <SelectItem value="student">Student</SelectItem>
-                </SelectContent>
-              </Select>
-              <Input
-                placeholder="Preferred Languages (comma-separated, e.g., en,hi)"
-                value={newUser.preferred_languages.join(",")}
-                onChange={(e) =>
-                  setNewUser({
-                    ...newUser,
-                    preferred_languages: e.target.value
-                      .split(",")
-                      .map((lang) => lang.trim())
-                      .filter(Boolean),
-                  })
-                }
-                className="md:col-span-2"
-              />
-              <Button onClick={handleCreateUser} className="md:col-span-1">
-                <Plus className="mr-2 h-4 w-4" /> Create User
-              </Button>
-            </CardContent>
-          </Card>
-
           {error && (
-            <div
-              className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4"
-              role="alert"
-            >
-              <strong className="font-bold">Error!</strong>
-              <span className="block sm:inline"> {error}</span>
-            </div>
+            <Alert variant="destructive" className="mb-4">
+              <AlertDescription>
+                <strong className="font-bold">Error!</strong> {error}
+              </AlertDescription>
+            </Alert>
           )}
 
           <Card>
             <CardHeader>
-              <CardTitle>All Users</CardTitle>
-              <CardDescription>
-                View and manage all users in the system.
-              </CardDescription>
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle>All Users</CardTitle>
+                  <CardDescription>
+                    Manage user accounts and permissions.
+                  </CardDescription>
+                </div>
+                <Button onClick={() => setShowCreateDialog(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add User
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -280,124 +204,53 @@ export default function AdminUsersPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>ID</TableHead>
-                      <TableHead>Email</TableHead>
                       <TableHead>Name</TableHead>
+                      <TableHead>Email</TableHead>
                       <TableHead>Role</TableHead>
-                      <TableHead>Languages</TableHead>
+                      <TableHead>Created</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {users.map((user) => (
                       <TableRow key={user.id}>
-                        <TableCell>{user.id}</TableCell>
+                        <TableCell className="font-medium">
+                          {user.name}
+                        </TableCell>
+                        <TableCell>{user.email}</TableCell>
                         <TableCell>
-                          {editingUser?.id === user.id ? (
-                            <Input
-                              value={editingUser.email}
-                              onChange={(e) =>
-                                setEditingUser({
-                                  ...editingUser,
-                                  email: e.target.value,
-                                })
-                              }
-                              disabled // Email usually not editable
-                            />
-                          ) : (
-                            user.email
-                          )}
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              user.role === "admin"
+                                ? "bg-red-100 text-red-800"
+                                : user.role === "teacher"
+                                ? "bg-blue-100 text-blue-800"
+                                : "bg-green-100 text-green-800"
+                            }`}
+                          >
+                            {user.role}
+                          </span>
                         </TableCell>
                         <TableCell>
-                          {editingUser?.id === user.id ? (
-                            <Input
-                              value={editingUser.name}
-                              onChange={(e) =>
-                                setEditingUser({
-                                  ...editingUser,
-                                  name: e.target.value,
-                                })
-                              }
-                            />
-                          ) : (
-                            user.name
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {editingUser?.id === user.id ? (
-                            <Select
-                              value={editingUser.role}
-                              onValueChange={(value) =>
-                                setEditingUser({ ...editingUser, role: value })
-                              }
-                            >
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="admin">Admin</SelectItem>
-                                <SelectItem value="teacher">Teacher</SelectItem>
-                                <SelectItem value="student">Student</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            user.role
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {editingUser?.id === user.id ? (
-                            <Input
-                              value={editingUser.preferred_languages.join(",")}
-                              onChange={(e) =>
-                                setEditingUser({
-                                  ...editingUser,
-                                  preferred_languages: e.target.value
-                                    .split(",")
-                                    .map((lang) => lang.trim())
-                                    .filter(Boolean),
-                                })
-                              }
-                            />
-                          ) : (
-                            user.preferred_languages.join(", ") || "N/A"
-                          )}
+                          {new Date(user.created_at).toLocaleDateString()}
                         </TableCell>
                         <TableCell className="text-right">
-                          {editingUser?.id === user.id ? (
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleUpdateUser(editingUser)}
-                              >
-                                <Check className="h-4 w-4 text-green-500" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setEditingUser(null)}
-                              >
-                                <X className="h-4 w-4 text-red-500" />
-                              </Button>
-                            </>
-                          ) : (
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setEditingUser(user)}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleDeleteUser(user.id)}
-                              >
-                                <Trash2 className="h-4 w-4 text-red-500" />
-                              </Button>
-                            </>
-                          )}
+                          <div className="flex justify-end space-x-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setEditingUser(user)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteUser(user.id)}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -406,6 +259,82 @@ export default function AdminUsersPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Create User Dialog */}
+          <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create New User</DialogTitle>
+                <DialogDescription>
+                  Add a new user to the system.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="name">Name</Label>
+                  <Input
+                    id="name"
+                    value={newUser.name}
+                    onChange={(e) =>
+                      setNewUser({ ...newUser, name: e.target.value })
+                    }
+                    placeholder="Enter full name"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={newUser.email}
+                    onChange={(e) =>
+                      setNewUser({ ...newUser, email: e.target.value })
+                    }
+                    placeholder="Enter email address"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={newUser.password}
+                    onChange={(e) =>
+                      setNewUser({ ...newUser, password: e.target.value })
+                    }
+                    placeholder="Enter password"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="role">Role</Label>
+                  <Select
+                    value={newUser.role}
+                    onValueChange={(value) =>
+                      setNewUser({ ...newUser, role: value })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="teacher">Teacher</SelectItem>
+                      <SelectItem value="student">Student</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex justify-end space-x-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowCreateDialog(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button onClick={handleCreateUser}>Create User</Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </main>
       </SidebarInset>
     </SidebarProvider>
