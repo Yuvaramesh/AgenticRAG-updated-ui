@@ -1,26 +1,36 @@
 "use client";
 
-import { useSession } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Upload, MessageCircle, User, LogOut } from "lucide-react";
-import { signOut } from "next-auth/react";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  BookOpen,
+  Users,
+  Upload,
+  MessageCircle,
+  Calendar,
+  BarChart3,
+} from "lucide-react";
+import { DynamicSidebar } from "@/components/dynamic-sidebar";
+import {
+  SidebarProvider,
+  SidebarInset,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
+import { Separator } from "@/components/ui/separator";
 
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
 
   useEffect(() => {
-    if (status === "loading") return; // Still loading
-    if (!session) router.push("/login");
+    if (status === "loading") return;
+    if (!session) {
+      router.push("/login");
+      return;
+    }
   }, [session, status, router]);
 
   if (status === "loading") {
@@ -35,105 +45,289 @@ export default function DashboardPage() {
     return null;
   }
 
-  const handleSignOut = () => {
-    signOut({ callbackUrl: "/login" });
-  };
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center space-x-4">
-              <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-            </div>
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                <User className="h-5 w-5 text-gray-500" />
-                <span className="text-sm text-gray-700">
-                  {session.user?.name}
-                </span>
-              </div>
-              <Button variant="outline" size="sm" onClick={handleSignOut}>
-                <LogOut className="h-4 w-4 mr-2 " />
-                Sign Out
-              </Button>
-            </div>
+    <SidebarProvider>
+      <DynamicSidebar />
+      <SidebarInset>
+        <header className="flex h-16 shrink-0 bg-white items-center gap-2 border-b px-4">
+          <SidebarTrigger className="-ml-1 text-black" />
+          <Separator orientation="vertical" className="mr-2 h-4" />
+          <Button
+            variant="ghost"
+            onClick={() => signOut()}
+            className="ml-auto text-black"
+          >
+            Sign Out
+          </Button>
+          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+        </header>
+
+        <main className="flex-1 text-black py-8 bg-white px-4 sm:px-6 lg:px-8">
+          <div className="mb-8">
+            <h2 className="text-3xl font-bold mb-2">
+              Welcome back, {session.user?.name || session.user?.email}!
+            </h2>
+            <p className="text-gray-600">
+              Choose an action to get started with your workspace.
+            </p>
           </div>
-        </div>
-      </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <h2 className="text-lg font-medium text-gray-900 mb-2">
-            Welcome back, {session.user?.name?.split(" ")[0]}!
-          </h2>
-          <p className="text-gray-600">
-            Choose an action to get started with your workspace.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl">
-          {/* Upload Card */}
-          <Card
-            className="hover:shadow-lg transition-shadow cursor-pointer group"
-            onClick={() => router.push("/upload")}
-          >
-            <CardHeader className="text-center pb-4">
-              <div className="mx-auto w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition-colors">
-                <Upload className="h-6 w-6 text-blue-600" />
-              </div>
-              <CardTitle className="text-xl text-gray-900">
-                Upload Files
-              </CardTitle>
-              <CardDescription className="text-gray-900">
-                Upload and manage your documents, images, and other files
-                securely.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button
-                className="w-full text-gray-900"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  router.push("/upload");
-                }}
+          {/* Admin Dashboard - Full Access */}
+          {session.user?.role === "admin" && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <Card
+                className="hover:shadow-lg transition-shadow cursor-pointer"
+                onClick={() => router.push("/admin/users")}
               >
-                Start Uploading
-              </Button>
-            </CardContent>
-          </Card>
+                <CardContent className="flex flex-col items-center justify-center p-6">
+                  <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                    <Users className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    Manage Users
+                  </h3>
+                  <p className="text-gray-600 text-center text-sm mb-4">
+                    Create, edit, and manage user accounts.
+                  </p>
+                  <Button onClick={() => router.push("/admin/users")}>
+                    View Users
+                  </Button>
+                </CardContent>
+              </Card>
 
-          {/* Chat Card */}
-          <Card
-            className="hover:shadow-lg transition-shadow text-gray-900 cursor-pointer group"
-            onClick={() => router.push("/chat")}
-          >
-            <CardHeader className="text-center pb-4">
-              <div className="mx-auto w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center group-hover:bg-green-200 transition-colors">
-                <MessageCircle className="h-6 w-6 text-green-600" />
-              </div>
-              <CardTitle className="text-xl text-gray-900">
-                Chat Assistant
-              </CardTitle>
-              <CardDescription className="text-gray-900">
-                Start a conversation with our AI assistant to get help and
-                answers.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button
-                className="w-full text-gray-900"
+              <Card
+                className="hover:shadow-lg transition-shadow cursor-pointer"
+                onClick={() => router.push("/upload")}
+              >
+                <CardContent className="flex flex-col items-center justify-center p-6">
+                  <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                    <Upload className="h-6 w-6 text-green-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    Upload Files
+                  </h3>
+                  <p className="text-gray-600 text-center text-sm mb-4">
+                    Upload and manage documents, images, and files.
+                  </p>
+                  <Button onClick={() => router.push("/upload")}>
+                    Start Uploading
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card
+                className="hover:shadow-lg transition-shadow cursor-pointer"
                 onClick={() => router.push("/chat")}
               >
-                Start Chatting
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </main>
-    </div>
+                <CardContent className="flex flex-col items-center justify-center p-6">
+                  <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mb-4">
+                    <MessageCircle className="h-6 w-6 text-purple-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    Chat Assistant
+                  </h3>
+                  <p className="text-gray-600 text-center text-sm mb-4">
+                    Start a conversation with our AI assistant.
+                  </p>
+                  <Button onClick={() => router.push("/chat")}>
+                    Start Chatting
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card
+                className="hover:shadow-lg transition-shadow cursor-pointer"
+                onClick={() => router.push("/teacher/quizzes")}
+              >
+                <CardContent className="flex flex-col items-center justify-center p-6">
+                  <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center mb-4">
+                    <BookOpen className="h-6 w-6 text-yellow-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    Manage Quizzes
+                  </h3>
+                  <p className="text-gray-600 text-center text-sm mb-4">
+                    Create, edit, and manage all quizzes.
+                  </p>
+                  <Button onClick={() => router.push("/teacher/quizzes")}>
+                    View Quizzes
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* <Card
+                className="hover:shadow-lg transition-shadow cursor-pointer"
+                onClick={() => router.push("/teacher/publish")}
+              >
+                <CardContent className="flex flex-col items-center justify-center p-6">
+                  <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mb-4">
+                    <Calendar className="h-6 w-6 text-indigo-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    Publish Content
+                  </h3>
+                  <p className="text-gray-600 text-center text-sm mb-4">
+                    Manage quiz and activity publishing.
+                  </p>
+                  <Button onClick={() => router.push("/teacher/publish")}>
+                    Publish Content
+                  </Button>
+                </CardContent>
+              </Card> */}
+
+              <Card
+                className="hover:shadow-lg transition-shadow cursor-pointer"
+                onClick={() => router.push("/student/report")}
+              >
+                <CardContent className="flex flex-col items-center justify-center p-6">
+                  <div className="w-12 h-12 bg-pink-100 rounded-full flex items-center justify-center mb-4">
+                    <BarChart3 className="h-6 w-6 text-pink-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    View Analytics
+                  </h3>
+                  <p className="text-gray-600 text-center text-sm mb-4">
+                    View all student reports and analytics.
+                  </p>
+                  <Button onClick={() => router.push("/student/report")}>
+                    View Analytics
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Teacher Dashboard - Limited Access */}
+          {session.user?.role === "teacher" && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card
+                className="hover:shadow-lg transition-shadow cursor-pointer"
+                onClick={() => router.push("/teacher/quizzes")}
+              >
+                <CardContent className="flex flex-col items-center justify-center p-6">
+                  <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                    <BookOpen className="h-6 w-6 text-green-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    Manage Quizzes
+                  </h3>
+                  <p className="text-gray-600 text-center text-sm mb-4">
+                    Create, edit, and manage your quizzes.
+                  </p>
+                  <Button onClick={() => router.push("/teacher/quizzes")}>
+                    View Quizzes
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card
+                className="hover:shadow-lg transition-shadow cursor-pointer"
+                onClick={() => router.push("/upload")}
+              >
+                <CardContent className="flex flex-col items-center justify-center p-6">
+                  <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                    <Upload className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    Upload Files
+                  </h3>
+                  <p className="text-gray-600 text-center text-sm mb-4">
+                    Upload and manage your course materials.
+                  </p>
+                  <Button onClick={() => router.push("/upload")}>
+                    Start Uploading
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* <Card
+                className="hover:shadow-lg transition-shadow cursor-pointer"
+                onClick={() => router.push("/teacher/publish")}
+              >
+                <CardContent className="flex flex-col items-center justify-center p-6">
+                  <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center mb-4">
+                    <Calendar className="h-6 w-6 text-yellow-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    Publish Content
+                  </h3>
+                  <p className="text-gray-600 text-center text-sm mb-4">
+                    Manage quiz and activity publishing.
+                  </p>
+                  <Button onClick={() => router.push("/teacher/publish")}>
+                    Publish Content
+                  </Button>
+                </CardContent>
+              </Card> */}
+
+              <Card
+                className="hover:shadow-lg transition-shadow cursor-pointer"
+                onClick={() => router.push("/student/report")}
+              >
+                <CardContent className="flex flex-col items-center justify-center p-6">
+                  <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mb-4">
+                    <BarChart3 className="h-6 w-6 text-purple-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    Analytics
+                  </h3>
+                  <p className="text-gray-600 text-center text-sm mb-4">
+                    View student performance analytics.
+                  </p>
+                  <Button onClick={() => router.push("/student/report")}>
+                    View Analytics
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Student Dashboard - Most Limited Access */}
+          {session.user?.role === "student" && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card
+                className="hover:shadow-lg transition-shadow cursor-pointer"
+                onClick={() => router.push("/chat")}
+              >
+                <CardContent className="flex flex-col items-center justify-center p-6">
+                  <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mb-4">
+                    <MessageCircle className="h-6 w-6 text-purple-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    Chat Assistant
+                  </h3>
+                  <p className="text-gray-600 text-center text-sm mb-4">
+                    Get help with your studies from our AI assistant.
+                  </p>
+                  <Button onClick={() => router.push("/chat")}>
+                    Start Chatting
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card
+                className="hover:shadow-lg transition-shadow cursor-pointer"
+                onClick={() => router.push("/student/quizzes")}
+              >
+                <CardContent className="flex flex-col items-center justify-center p-6">
+                  <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                    <BookOpen className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    Take Quizzes
+                  </h3>
+                  <p className="text-gray-600 text-center text-sm mb-4">
+                    Access published quizzes and track your status.
+                  </p>
+                  <Button onClick={() => router.push("/student/quizzes")}>
+                    View Quizzes
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </main>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
